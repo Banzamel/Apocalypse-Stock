@@ -1,0 +1,14 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Zapasy Apokaliptyczne",
+        "description": "Skonfiguruj tracker zapasów na apokalipsę. Ta integracja pomoże Ci zarządzać zapasami żywności, śledzić daty ważności i liczyć całkowitą kaloryczność."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Dozwolona jest tylko jedna instancja Apocalypse Stock. Integracja jest już skonfigurowana."
+    }
+  },
+  "title": "Zapasy Apokaliptyczne"
+}

@@ -1,0 +1,14 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Apocalypse Stock",
+        "description": "Set up your apocalypse stock tracker. This integration helps you manage food supplies, track expiration dates, and calculate total calories."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one instance of Apocalypse Stock is allowed. The integration is already configured."
+    }
+  },
+  "title": "Apocalypse Stock"
+}
