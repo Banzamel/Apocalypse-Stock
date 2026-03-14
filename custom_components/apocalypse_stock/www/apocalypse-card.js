@@ -10,14 +10,9 @@ class ApocalypseStockCard extends HTMLElement {
     this.items = [];
     this._scannerActive = false;
     this._html5QrCode = null;
-    this._loadScannerLib();
-  }
-
-  _loadScannerLib() {
-    if (window.Html5Qrcode) return;
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-    document.head.appendChild(script);
+    this._stream = null;
+    this._scanTimer = null;
+    this._scanBuffer = {};
   }
 
   setConfig(config) {
@@ -309,94 +304,204 @@ class ApocalypseStockCard extends HTMLElement {
     };
   }
 
-  _startScanner() {
-    if (!window.Html5Qrcode) {
-      this._setScanStatus('Ładowanie biblioteki skanera...');
-      setTimeout(() => this._startScanner(), 500);
-      return;
-    }
-
-    // Tworzenie nakładki skanera poza shadow DOM
+  async _startScanner() {
+    // Tworzenie nakładki skanera
     this._scannerOverlay = document.createElement('div');
     this._scannerOverlay.id = 'apo-scanner-overlay';
     this._scannerOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
-
-    const readerDiv = document.createElement('div');
-    readerDiv.id = 'apo-scanner-reader';
-    readerDiv.style.cssText = 'width:100%;max-width:500px;';
 
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = '✕ ZAMKNIJ SKANER';
     cancelBtn.style.cssText = 'margin-top:20px;padding:12px 30px;font-size:1em;background:#f44336;color:white;border:none;border-radius:25px;cursor:pointer;font-weight:bold;';
     cancelBtn.onclick = () => this._stopScanner();
 
-    this._scannerOverlay.appendChild(readerDiv);
-    this._scannerOverlay.appendChild(cancelBtn);
-    document.body.appendChild(this._scannerOverlay);
-
-    this._html5QrCode = new Html5Qrcode('apo-scanner-reader', {
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39
-      ]
-    });
     this._scannerActive = true;
 
-    this._html5QrCode.start(
-      { facingMode: { exact: 'environment' } },
-      { fps: 5, qrbox: { width: 350, height: 120 },
-        videoConstraints: {
-          facingMode: { exact: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          advanced: [{ focusMode: 'continuous' }]
-        }
-      },
-      (decodedText) => {
-        this._stopScanner();
-        this._lookupBarcode(decodedText);
-      },
-      () => {} // ignoruj błędy skanowania (brak kodu w kadrze)
-    ).then(() => {
-      // Wymuszenie ciągłego autofocusa po uruchomieniu kamery
+    // Sprawdź natywne API BarcodeDetector (Chrome/Android - dużo dokładniejszy odczyt)
+    let useNative = false;
+    if ('BarcodeDetector' in window) {
       try {
-        const video = document.getElementById('apo-scanner-reader')?.querySelector('video');
-        if (video && video.srcObject) {
-          const track = video.srcObject.getVideoTracks()[0];
-          const caps = track.getCapabilities && track.getCapabilities();
-          if (caps && caps.focusMode) {
-            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-          }
-          // Wyższa rozdzielczość jeśli dostępna
-          if (caps && caps.width) {
-            track.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } });
-          }
-        }
+        const formats = await BarcodeDetector.getSupportedFormats();
+        useNative = formats.includes('ean_13');
       } catch (_) {}
-    }).catch(err => {
-      this._stopScanner();
-      this._setScanStatus('Brak dostępu do kamery: ' + err);
-    });
+    }
+
+    if (useNative) {
+      // --- Natywny BarcodeDetector (najdokładniejszy) ---
+      const videoContainer = document.createElement('div');
+      videoContainer.style.cssText = 'position:relative;width:100%;max-width:500px;';
+
+      const video = document.createElement('video');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('autoplay', '');
+      video.setAttribute('muted', '');
+      video.style.cssText = 'width:100%;border-radius:8px;';
+
+      // Linia celownika
+      const guide = document.createElement('div');
+      guide.style.cssText = 'position:absolute;left:10%;right:10%;top:50%;height:2px;background:#f44336;box-shadow:0 0 8px rgba(244,67,54,0.8);transform:translateY(-50%);pointer-events:none;';
+
+      videoContainer.appendChild(video);
+      videoContainer.appendChild(guide);
+      this._scannerOverlay.appendChild(videoContainer);
+      this._scannerOverlay.appendChild(cancelBtn);
+      document.body.appendChild(this._scannerOverlay);
+
+      try {
+        this._stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+          },
+          audio: false
+        });
+
+        video.srcObject = this._stream;
+
+        // Ciągły autofocus
+        try {
+          const track = this._stream.getVideoTracks()[0];
+          const caps = track.getCapabilities ? track.getCapabilities() : {};
+          if (caps.focusMode) {
+            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          }
+        } catch (_) {}
+
+        const detector = new BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+        });
+
+        const scanLoop = async () => {
+          if (!this._scannerActive) return;
+          try {
+            if (video.readyState >= 2) {
+              const results = await detector.detect(video);
+              if (results.length > 0) {
+                const code = results[0].rawValue;
+                if (this._validateBarcode(code)) {
+                  this._stopScanner();
+                  this.shadowRoot.getElementById('in-barcode').value = code;
+                  this._lookupBarcode(code);
+                  return;
+                }
+              }
+            }
+          } catch (_) {}
+          this._scanTimer = setTimeout(scanLoop, 150);
+        };
+
+        video.onloadeddata = () => scanLoop();
+      } catch (err) {
+        this._stopScanner();
+        this._setScanStatus('Brak dostępu do kamery: ' + err.message);
+      }
+    } else {
+      // --- Fallback: html5-qrcode (dla przeglądarek bez BarcodeDetector) ---
+      if (!window.Html5Qrcode) {
+        this._setScanStatus('Ładowanie biblioteki skanera...');
+        this._scannerActive = false;
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+        script.onload = () => this._startScanner();
+        script.onerror = () => this._setScanStatus('Nie udało się załadować skanera');
+        document.head.appendChild(script);
+        return;
+      }
+
+      const readerDiv = document.createElement('div');
+      readerDiv.id = 'apo-scanner-reader';
+      readerDiv.style.cssText = 'width:100%;max-width:500px;';
+
+      this._scannerOverlay.appendChild(readerDiv);
+      this._scannerOverlay.appendChild(cancelBtn);
+      document.body.appendChild(this._scannerOverlay);
+
+      this._html5QrCode = new Html5Qrcode('apo-scanner-reader', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39
+        ]
+      });
+
+      this._html5QrCode.start(
+        { facingMode: { ideal: 'environment' } },
+        { fps: 10, qrbox: { width: 350, height: 120 },
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: 'continuous' }]
+          }
+        },
+        (decodedText) => {
+          if (this._validateBarcode(decodedText)) {
+            // Wielokrotny odczyt - akceptuj kod dopiero po 3 identycznych odczytach
+            this._scanBuffer[decodedText] = (this._scanBuffer[decodedText] || 0) + 1;
+            if (this._scanBuffer[decodedText] >= 3) {
+              this._scanBuffer = {};
+              this._stopScanner();
+              this.shadowRoot.getElementById('in-barcode').value = decodedText;
+              this._lookupBarcode(decodedText);
+            }
+          }
+        },
+        () => {}
+      ).then(() => {
+        try {
+          const video = document.getElementById('apo-scanner-reader')?.querySelector('video');
+          if (video && video.srcObject) {
+            const track = video.srcObject.getVideoTracks()[0];
+            const caps = track.getCapabilities && track.getCapabilities();
+            if (caps && caps.focusMode) {
+              track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+            }
+            if (caps && caps.width) {
+              track.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } });
+            }
+          }
+        } catch (_) {}
+      }).catch(err => {
+        this._stopScanner();
+        this._setScanStatus('Brak dostępu do kamery: ' + err);
+      });
+    }
   }
 
   _stopScanner() {
-    const cleanup = () => {
+    this._scannerActive = false;
+    this._scanBuffer = {};
+
+    // Anuluj timer skanowania natywnego
+    if (this._scanTimer) {
+      clearTimeout(this._scanTimer);
+      this._scanTimer = null;
+    }
+
+    // Zatrzymaj strumień kamery (natywny skaner)
+    if (this._stream) {
+      this._stream.getTracks().forEach(t => t.stop());
+      this._stream = null;
+    }
+
+    // Wyczyść html5-qrcode (fallback)
+    const cleanupLib = () => {
       try { if (this._html5QrCode) this._html5QrCode.clear(); } catch (_) {}
-      this._scannerActive = false;
-      if (this._scannerOverlay) {
-        this._scannerOverlay.remove();
-        this._scannerOverlay = null;
-      }
+      this._html5QrCode = null;
     };
 
-    if (this._html5QrCode && this._scannerActive) {
-      this._html5QrCode.stop().then(cleanup).catch(cleanup);
-    } else {
-      cleanup();
+    if (this._html5QrCode) {
+      this._html5QrCode.stop().then(cleanupLib).catch(cleanupLib);
+    }
+
+    // Usuń nakładkę
+    if (this._scannerOverlay) {
+      this._scannerOverlay.remove();
+      this._scannerOverlay = null;
     }
   }
 
@@ -405,7 +510,31 @@ class ApocalypseStockCard extends HTMLElement {
     if (el) el.textContent = msg;
   }
 
+  _validateBarcode(code) {
+    // EAN-13: walidacja cyfry kontrolnej
+    if (/^\d{13}$/.test(code)) {
+      let sum = 0;
+      for (let i = 0; i < 12; i++) sum += parseInt(code[i]) * (i % 2 === 0 ? 1 : 3);
+      return (10 - (sum % 10)) % 10 === parseInt(code[12]);
+    }
+    // EAN-8: walidacja cyfry kontrolnej
+    if (/^\d{8}$/.test(code)) {
+      let sum = 0;
+      for (let i = 0; i < 7; i++) sum += parseInt(code[i]) * (i % 2 === 0 ? 3 : 1);
+      return (10 - (sum % 10)) % 10 === parseInt(code[7]);
+    }
+    // UPC-A (12 cyfr): walidacja cyfry kontrolnej
+    if (/^\d{12}$/.test(code)) {
+      let sum = 0;
+      for (let i = 0; i < 11; i++) sum += parseInt(code[i]) * (i % 2 === 0 ? 3 : 1);
+      return (10 - (sum % 10)) % 10 === parseInt(code[11]);
+    }
+    // Inne formaty - akceptuj jeśli niepusty
+    return code.length > 0;
+  }
+
   async _lookupBarcode(barcode) {
+    this.shadowRoot.getElementById('in-barcode').value = barcode;
     this._setScanStatus(`Zeskanowano: ${barcode} — szukam...`);
 
     // Próbuj oryginalny kod, a jeśli nie znajdzie i ma 12 cyfr, spróbuj z wiodącym zerem (UPC-A → EAN-13)
