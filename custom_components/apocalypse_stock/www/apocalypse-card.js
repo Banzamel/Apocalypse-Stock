@@ -8,6 +8,16 @@ class ApocalypseStockCard extends HTMLElement {
     this.sortBy = 'expiry';
     this._openCategories = new Set(); // Pamięć otwartych sekcji
     this.items = [];
+    this._scannerActive = false;
+    this._html5QrCode = null;
+    this._loadScannerLib();
+  }
+
+  _loadScannerLib() {
+    if (window.Html5Qrcode) return;
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    document.head.appendChild(script);
   }
 
   setConfig(config) {
@@ -82,6 +92,10 @@ class ApocalypseStockCard extends HTMLElement {
         
         .list-container::-webkit-scrollbar { width: 4px; }
         .list-container::-webkit-scrollbar-thumb { background: var(--divider-color); border-radius: 4px; }
+
+        .btn-scan { background: #607d8b; color: white; border: none; padding: 10px; border-radius: 25px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px; font-size: 0.95em; }
+        .btn-scan:active { background: #455a64; }
+        .scan-status { text-align: center; font-size: 0.85em; color: var(--secondary-text-color); margin-bottom: 8px; min-height: 1.2em; }
       </style>
 
       <ha-card>
@@ -115,6 +129,8 @@ class ApocalypseStockCard extends HTMLElement {
         <div id="add-modal">
           <div class="modal-content">
             <h3>Dodaj nowy zasób</h3>
+            <button class="btn-scan" id="btn-scan">📷 SKANUJ KOD KRESKOWY</button>
+            <div class="scan-status" id="scan-status"></div>
             <select id="in-cat">
 				<option value="Owoce">Instant</option>
 				<option value="Suche">Suche</option>
@@ -188,7 +204,6 @@ class ApocalypseStockCard extends HTMLElement {
             <thead>
               <tr>
                 <th style="width: 40%;">Produkt</th>
-                <th>Kcal</th>
                 <th>Ważność</th>
                 <th>Ilość</th>
                 <th></th>
@@ -237,12 +252,25 @@ class ApocalypseStockCard extends HTMLElement {
     root.getElementById('open-modal').onclick = () => {
       this._modalOpen = true;
       root.getElementById('add-modal').style.display = 'flex';
+      this._setScanStatus('');
+      // Reset pól formularza
+      root.getElementById('in-name').value = '';
+      root.getElementById('in-brand').value = '';
+      root.getElementById('in-weight').value = '';
+      root.getElementById('in-expiry').value = '';
+      root.getElementById('in-cal').value = '';
+      root.getElementById('in-cat').value = 'Owoce';
     };
 
     root.getElementById('close-modal').onclick = () => {
       this._modalOpen = false;
+      this._stopScanner();
       root.getElementById('add-modal').style.display = 'none';
       this._updateDynamicContent();
+    };
+
+    root.getElementById('btn-scan').onclick = () => {
+      this._startScanner();
     };
 
     root.getElementById('save-item').onclick = () => {
@@ -262,6 +290,136 @@ class ApocalypseStockCard extends HTMLElement {
       this._updateDynamicContent();
       this._saveToHA(); // Zapis do sensora
     };
+  }
+
+  _startScanner() {
+    if (!window.Html5Qrcode) {
+      this._setScanStatus('Ładowanie biblioteki skanera...');
+      setTimeout(() => this._startScanner(), 500);
+      return;
+    }
+
+    // Tworzenie nakładki skanera poza shadow DOM
+    this._scannerOverlay = document.createElement('div');
+    this._scannerOverlay.id = 'apo-scanner-overlay';
+    this._scannerOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+
+    const readerDiv = document.createElement('div');
+    readerDiv.id = 'apo-scanner-reader';
+    readerDiv.style.cssText = 'width:100%;max-width:500px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '✕ ZAMKNIJ SKANER';
+    cancelBtn.style.cssText = 'margin-top:20px;padding:12px 30px;font-size:1em;background:#f44336;color:white;border:none;border-radius:25px;cursor:pointer;font-weight:bold;';
+    cancelBtn.onclick = () => this._stopScanner();
+
+    this._scannerOverlay.appendChild(readerDiv);
+    this._scannerOverlay.appendChild(cancelBtn);
+    document.body.appendChild(this._scannerOverlay);
+
+    this._html5QrCode = new Html5Qrcode('apo-scanner-reader');
+    this._scannerActive = true;
+
+    this._html5QrCode.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 280, height: 150 }, formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39
+      ]},
+      (decodedText) => {
+        this._stopScanner();
+        this._lookupBarcode(decodedText);
+      },
+      () => {} // ignoruj błędy skanowania (brak kodu w kadrze)
+    ).catch(err => {
+      this._stopScanner();
+      this._setScanStatus('Brak dostępu do kamery');
+    });
+  }
+
+  _stopScanner() {
+    if (this._html5QrCode && this._scannerActive) {
+      this._html5QrCode.stop().catch(() => {});
+      this._html5QrCode.clear();
+      this._scannerActive = false;
+    }
+    if (this._scannerOverlay) {
+      this._scannerOverlay.remove();
+      this._scannerOverlay = null;
+    }
+  }
+
+  _setScanStatus(msg) {
+    const el = this.shadowRoot.getElementById('scan-status');
+    if (el) el.textContent = msg;
+  }
+
+  async _lookupBarcode(barcode) {
+    this._setScanStatus(`Szukam produktu: ${barcode}...`);
+    try {
+      const resp = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      const data = await resp.json();
+      if (data.status !== 1 || !data.product) {
+        this._setScanStatus(`Nie znaleziono produktu (${barcode})`);
+        return;
+      }
+
+      const p = data.product;
+      const root = this.shadowRoot;
+
+      // Nazwa
+      root.getElementById('in-name').value = p.product_name || p.product_name_pl || '';
+      // Marka
+      root.getElementById('in-brand').value = p.brands || '';
+      // Gramatura
+      const weight = p.product_quantity || p.quantity || '';
+      root.getElementById('in-weight').value = String(weight).replace(/[^\d.,]/g, '');
+      // Kalorie - przeliczenie z kcal/100g na porcję
+      const kcal100 = p.nutriments && p.nutriments['energy-kcal_100g'];
+      const weightNum = parseFloat(String(weight).replace(/[^\d.,]/g, '').replace(',', '.'));
+      if (kcal100 && weightNum) {
+        root.getElementById('in-cal').value = Math.round(kcal100 * weightNum / 100);
+      } else if (kcal100) {
+        root.getElementById('in-cal').value = Math.round(kcal100);
+      }
+
+      // Mapowanie kategorii
+      const category = this._mapCategory(p.categories_tags || [], p.categories || '');
+      if (category) {
+        root.getElementById('in-cat').value = category;
+      }
+
+      this._setScanStatus(`Znaleziono: ${p.product_name || barcode}`);
+    } catch (e) {
+      this._setScanStatus(`Błąd pobierania danych (${barcode})`);
+    }
+  }
+
+  _mapCategory(tags, categoriesStr) {
+    const all = [...tags, ...categoriesStr.toLowerCase().split(',')].map(c => c.toLowerCase());
+    const map = [
+      { keywords: ['instant', 'noodle', 'zupk'], category: 'Owoce' },
+      { keywords: ['dried', 'dry', 'rice', 'pasta', 'flour', 'cereal', 'grain', 'suche', 'ryż', 'makaron', 'mąka', 'kasza', 'płatki'], category: 'Suche' },
+      { keywords: ['chocolate', 'candy', 'sweet', 'sugar', 'biscuit', 'cookie', 'wafer', 'czekolad', 'cukier', 'słodycz', 'ciastk', 'wafel'], category: 'Słodkie' },
+      { keywords: ['ready', 'meal', 'prepared', 'gotowe', 'danie'], category: 'Gotowe' },
+      { keywords: ['canned', 'can:', 'conserve', 'konserw', 'puszk'], category: 'Konserwy' },
+      { keywords: ['preserve', 'jam', 'pickl', 'przetwor', 'dżem', 'marynat', 'kompot'], category: 'Przetwory' },
+      { keywords: ['tomato', 'pomidor', 'ketchup', 'passata'], category: 'Pomidory' },
+      { keywords: ['spice', 'herb', 'seasoning', 'przypraw', 'zioł'], category: 'Przyprawy' },
+      { keywords: ['medicine', 'pharma', 'supplement', 'vitamin', 'medic', 'lek', 'witamin', 'suplement'], category: 'Medykamenty' },
+      { keywords: ['energy', 'bar:', 'protein', 'sport', 'energet', 'baton'], category: 'Energetyczne' },
+    ];
+
+    for (const { keywords, category } of map) {
+      if (all.some(c => keywords.some(k => c.includes(k)))) {
+        return category;
+      }
+    }
+    return 'Inne';
   }
 
   _updateQty(id, delta) {

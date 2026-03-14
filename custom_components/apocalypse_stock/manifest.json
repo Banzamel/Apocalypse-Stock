@@ -3,10 +3,9 @@
   "name": "Apocalypse Stock",
   "documentation": "https://github.com/Banzamel/apocalypse-stock",
   "issue_tracker": "https://github.com/Banzamel/apocalypse-stock/issues",
-  "documentation": "",
   "dependencies": [],
   "codeowners": ["@Banzamel"],
-  "version": "1.5.8",
+  "version": "1.6.0",
   "iot_class": "local_push",
   "config_flow": true
 }

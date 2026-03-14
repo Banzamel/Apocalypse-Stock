@@ -21,6 +21,7 @@ Comprehensive supply management for Home Assistant - track your emergency food s
   - Energy foods
   - Other
 
+- **📷 Barcode Scanner** - Scan product barcodes with your phone camera (Open Food Facts integration)
 - **💾 Persistent Storage** - All data is saved automatically
 - **🎨 Beautiful UI** - Custom Lovelace card with modern design
 - **🌐 Multi-language** - English and Polish translations included

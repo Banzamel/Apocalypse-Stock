@@ -17,6 +17,7 @@ A comprehensive supply management integration for Home Assistant. Track your eme
 - **🏷️ Category Organization** - Organize items into 11 collapsible categories
 - **💾 Persistent Storage** - All data is automatically saved and persists across restarts
 - **🎨 Beautiful Custom Card** - Modern, responsive Lovelace card with intuitive UI
+- **📷 Barcode Scanner** - Scan product barcodes with your phone camera to quickly add items using Open Food Facts database
 - **🌐 Multi-language Support** - Fully translated into English and Polish
 
 ## 📦 Categories
@@ -100,6 +101,18 @@ type: custom:apocalypse-stock-card
    - **Expiration date**: Select from calendar
    - **Calories**: Calories per unit
 3. Click **"ZAPISZ"** (Save)
+
+### Barcode Scanner
+
+1. Click **"+ DODAJ"** to open the add item modal
+2. Click **"📷 SKANUJ KOD KRESKOWY"** (Scan Barcode)
+3. Point your phone camera at the product barcode (EAN-13, EAN-8, UPC-A, UPC-E, CODE-128, CODE-39 supported)
+4. The form will be automatically filled with product data from Open Food Facts:
+   - Product name and brand
+   - Weight in grams
+   - Calories (calculated per unit based on kcal/100g)
+   - Auto-mapped category
+5. Review and adjust the data, then click **"ZAPISZ"** (Save)
 
 ### Managing Inventory
 
@@ -202,7 +215,13 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 1.5.8 (Current)
+### Version 1.6.0 (Current)
+- Barcode scanner - scan product codes with phone camera to auto-fill item data
+- Open Food Facts API integration for automatic product lookup
+- Auto-category mapping from product data
+- Supported barcode formats: EAN-13, EAN-8, UPC-A, UPC-E, CODE-128, CODE-39
+
+### Version 1.5.8
 - Initial public release
 - Full inventory management
 - Category organization
