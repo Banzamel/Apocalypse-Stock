@@ -382,6 +382,10 @@ class ApocalypseStockCard extends HTMLElement {
   }
 
   async _lookupBarcode(barcode) {
+    // UPC-A (12 cyfr) to EAN-13 bez wiodącego zera - uzupełnij do 13
+    if (/^\d{12}$/.test(barcode)) {
+      barcode = '0' + barcode;
+    }
     this._setScanStatus(`Szukam produktu: ${barcode}...`);
     try {
       const resp = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
