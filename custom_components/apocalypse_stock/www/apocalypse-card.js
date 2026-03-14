@@ -129,7 +129,11 @@ class ApocalypseStockCard extends HTMLElement {
         <div id="add-modal">
           <div class="modal-content">
             <h3>Dodaj nowy zasób</h3>
-            <button class="btn-scan" id="btn-scan">📷 SKANUJ KOD KRESKOWY</button>
+            <div style="display: flex; gap: 8px; margin-bottom: 4px;">
+              <input type="text" id="in-barcode" placeholder="Wpisz kod kreskowy..." style="flex: 1;">
+              <button class="btn-scan" id="btn-barcode-search" style="width: auto; margin: 0; padding: 10px 15px;">🔍</button>
+              <button class="btn-scan" id="btn-scan" style="width: auto; margin: 0; padding: 10px 15px;">📷</button>
+            </div>
             <div class="scan-status" id="scan-status"></div>
             <select id="in-cat">
 				<option value="Owoce">Instant</option>
@@ -254,6 +258,7 @@ class ApocalypseStockCard extends HTMLElement {
       root.getElementById('add-modal').style.display = 'flex';
       this._setScanStatus('');
       // Reset pól formularza
+      root.getElementById('in-barcode').value = '';
       root.getElementById('in-name').value = '';
       root.getElementById('in-brand').value = '';
       root.getElementById('in-weight').value = '';
@@ -272,6 +277,18 @@ class ApocalypseStockCard extends HTMLElement {
     root.getElementById('btn-scan').onclick = () => {
       this._startScanner();
     };
+
+    root.getElementById('btn-barcode-search').onclick = () => {
+      const code = root.getElementById('in-barcode').value.trim();
+      if (code) this._lookupBarcode(code);
+    };
+
+    root.getElementById('in-barcode').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const code = e.target.value.trim();
+        if (code) this._lookupBarcode(code);
+      }
+    });
 
     root.getElementById('save-item').onclick = () => {
       const newItem = {
