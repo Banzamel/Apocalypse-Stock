@@ -327,15 +327,36 @@ class ApocalypseStockCard extends HTMLElement {
     const guide = document.createElement('div');
     guide.style.cssText = 'position:absolute;left:10%;right:10%;top:50%;height:2px;background:#f44336;box-shadow:0 0 8px rgba(244,67,54,0.8);transform:translateY(-50%);pointer-events:none;';
 
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:12px;margin-top:20px;';
+
+    const torchBtn = document.createElement('button');
+    torchBtn.textContent = '🔦 LATARKA';
+    torchBtn.style.cssText = 'padding:12px 24px;font-size:1em;background:#607d8b;color:white;border:none;border-radius:25px;cursor:pointer;font-weight:bold;';
+    torchBtn.onclick = async () => {
+      if (!this._stream) return;
+      const track = this._stream.getVideoTracks()[0];
+      try {
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.torch) {
+          const settings = track.getSettings();
+          await track.applyConstraints({ advanced: [{ torch: !settings.torch }] });
+          torchBtn.style.background = settings.torch ? '#607d8b' : '#ff9800';
+        }
+      } catch (_) {}
+    };
+
     const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = '✕ ZAMKNIJ SKANER';
-    cancelBtn.style.cssText = 'margin-top:20px;padding:12px 30px;font-size:1em;background:#f44336;color:white;border:none;border-radius:25px;cursor:pointer;font-weight:bold;';
+    cancelBtn.textContent = '✕ ZAMKNIJ';
+    cancelBtn.style.cssText = 'padding:12px 24px;font-size:1em;background:#f44336;color:white;border:none;border-radius:25px;cursor:pointer;font-weight:bold;';
     cancelBtn.onclick = () => this._stopScanner();
 
     videoContainer.appendChild(video);
     videoContainer.appendChild(guide);
+    btnRow.appendChild(torchBtn);
+    btnRow.appendChild(cancelBtn);
     this._scannerOverlay.appendChild(videoContainer);
-    this._scannerOverlay.appendChild(cancelBtn);
+    this._scannerOverlay.appendChild(btnRow);
     document.body.appendChild(this._scannerOverlay);
 
     this._scannerActive = true;
@@ -346,6 +367,7 @@ class ApocalypseStockCard extends HTMLElement {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1920, min: 1280 },
           height: { ideal: 1080, min: 720 },
+          focusMode: { ideal: 'continuous' },
         },
         audio: false
       });
@@ -354,18 +376,49 @@ class ApocalypseStockCard extends HTMLElement {
       video.muted = true;
       await video.play();
 
-      // Ciągły autofocus
+      // Zaawansowane ustawienia ostrości
       try {
         const track = this._stream.getVideoTracks()[0];
         const caps = track.getCapabilities ? track.getCapabilities() : {};
-        if (caps.focusMode) {
-          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+        const advancedConstraints = [];
+
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+          advancedConstraints.push({ focusMode: 'continuous' });
+        }
+        // Bliska odległość ogniskowania dla skanowania z bliska
+        if (caps.focusDistance) {
+          const minDist = caps.focusDistance.min || 0;
+          const maxDist = caps.focusDistance.max || 1;
+          // Ustaw ostrość na bliski zakres (ok. 10-20cm) — dolne 15% zakresu
+          const closeDist = minDist + (maxDist - minDist) * 0.15;
+          advancedConstraints.push({ focusDistance: closeDist });
+        }
+
+        if (advancedConstraints.length > 0) {
+          await track.applyConstraints({ advanced: advancedConstraints });
         }
       } catch (_) {}
+
+      // Tap-to-focus: dotknięcie ekranu wymusza refocus
+      video.onclick = async () => {
+        try {
+          const track = this._stream.getVideoTracks()[0];
+          const caps = track.getCapabilities ? track.getCapabilities() : {};
+          if (caps.focusMode && caps.focusMode.includes('manual')) {
+            // Przełącz na manual i z powrotem na continuous — wymusza ponowne złapanie ostrości
+            await track.applyConstraints({ advanced: [{ focusMode: 'manual' }] });
+            await new Promise(r => setTimeout(r, 100));
+            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          }
+        } catch (_) {}
+      };
 
       const detector = new BarcodeDetector({
         formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
       });
+
+      let confirmCode = null;
+      let confirmCount = 0;
 
       const scanLoop = async () => {
         if (!this._scannerActive) return;
@@ -375,15 +428,24 @@ class ApocalypseStockCard extends HTMLElement {
             if (results.length > 0) {
               const code = results[0].rawValue;
               if (this._validateBarcode(code)) {
-                this._stopScanner();
-                this.shadowRoot.getElementById('in-barcode').value = code;
-                this._lookupBarcode(code);
-                return;
+                // Potwierdź odczyt — ten sam kod 2x pod rząd eliminuje błędne odczyty
+                if (code === confirmCode) {
+                  confirmCount++;
+                } else {
+                  confirmCode = code;
+                  confirmCount = 1;
+                }
+                if (confirmCount >= 2) {
+                  this._stopScanner();
+                  this.shadowRoot.getElementById('in-barcode').value = code;
+                  this._lookupBarcode(code);
+                  return;
+                }
               }
             }
           }
         } catch (_) {}
-        this._scanTimer = setTimeout(scanLoop, 150);
+        this._scanTimer = setTimeout(scanLoop, 200);
       };
 
       video.onloadeddata = () => scanLoop();

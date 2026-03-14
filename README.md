@@ -217,18 +217,29 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 1.7.0 (Current)
+### Version 1.8.0 (Current)
+- Improved camera autofocus for barcode scanning (close-range focus distance)
+- Added tap-to-focus — tap the camera preview to re-trigger autofocus
+- Added torch/flashlight button for better barcode illumination
+- Added double-read confirmation to eliminate false barcode reads from blurry frames
+
+### Version 1.7.1
+- Fixed camera preview not showing in WebView (Android companion app)
+
+### Version 1.7.0
 - Replaced barcode scanner with native BarcodeDetector API for accurate reads
 - Removed html5-qrcode (ZXing-js) library — fixed incorrect barcode values
 - Added barcode checksum validation (EAN-13, EAN-8, UPC-A)
 - iOS: camera scanning not supported, use manual barcode input
 
 ### Version 1.6.x
+- Added manual barcode input field with search button
+- Improved barcode scanner accuracy and reliability
+- Fixed UPC-A to EAN-13 conversion for barcode lookup
+- Enabled continuous autofocus for barcode scanner camera
 - Barcode scanner with html5-qrcode library
-- Manual barcode input field
 - Open Food Facts API integration for automatic product lookup
 - Auto-category mapping from product data
-- Continuous autofocus and UPC-A to EAN-13 conversion
 
 ### Version 1.5.8
 - Initial public release
