@@ -317,19 +317,21 @@ class ApocalypseStockCard extends HTMLElement {
     this._scannerOverlay.appendChild(cancelBtn);
     document.body.appendChild(this._scannerOverlay);
 
-    this._html5QrCode = new Html5Qrcode('apo-scanner-reader');
-    this._scannerActive = true;
-
-    this._html5QrCode.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 280, height: 150 }, formatsToSupport: [
+    this._html5QrCode = new Html5Qrcode('apo-scanner-reader', {
+      formatsToSupport: [
         Html5QrcodeSupportedFormats.EAN_13,
         Html5QrcodeSupportedFormats.EAN_8,
         Html5QrcodeSupportedFormats.UPC_A,
         Html5QrcodeSupportedFormats.UPC_E,
         Html5QrcodeSupportedFormats.CODE_128,
         Html5QrcodeSupportedFormats.CODE_39
-      ]},
+      ]
+    });
+    this._scannerActive = true;
+
+    this._html5QrCode.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 280, height: 150 } },
       (decodedText) => {
         this._stopScanner();
         this._lookupBarcode(decodedText);
@@ -337,19 +339,24 @@ class ApocalypseStockCard extends HTMLElement {
       () => {} // ignoruj błędy skanowania (brak kodu w kadrze)
     ).catch(err => {
       this._stopScanner();
-      this._setScanStatus('Brak dostępu do kamery');
+      this._setScanStatus('Brak dostępu do kamery: ' + err);
     });
   }
 
   _stopScanner() {
-    if (this._html5QrCode && this._scannerActive) {
-      this._html5QrCode.stop().catch(() => {});
-      this._html5QrCode.clear();
+    const cleanup = () => {
+      try { if (this._html5QrCode) this._html5QrCode.clear(); } catch (_) {}
       this._scannerActive = false;
-    }
-    if (this._scannerOverlay) {
-      this._scannerOverlay.remove();
-      this._scannerOverlay = null;
+      if (this._scannerOverlay) {
+        this._scannerOverlay.remove();
+        this._scannerOverlay = null;
+      }
+    };
+
+    if (this._html5QrCode && this._scannerActive) {
+      this._html5QrCode.stop().then(cleanup).catch(cleanup);
+    } else {
+      cleanup();
     }
   }
 
