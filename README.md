@@ -105,7 +105,7 @@ type: custom:apocalypse-stock-card
 ### Barcode Scanner
 
 1. Click **"+ DODAJ"** to open the add item modal
-2. Click **"📷 SKANUJ KOD KRESKOWY"** (Scan Barcode)
+2. Click **"📷"** to scan or type the barcode manually in the input field and click **"🔍"**
 3. Point your phone camera at the product barcode (EAN-13, EAN-8, UPC-A, UPC-E, CODE-128, CODE-39 supported)
 4. The form will be automatically filled with product data from Open Food Facts:
    - Product name and brand
@@ -113,6 +113,8 @@ type: custom:apocalypse-stock-card
    - Calories (calculated per unit based on kcal/100g)
    - Auto-mapped category
 5. Review and adjust the data, then click **"ZAPISZ"** (Save)
+
+> **Note**: Camera scanning requires the native BarcodeDetector API (Android / Chrome / Edge). On **iOS (Safari)** camera scanning is not available — use the manual barcode input field instead.
 
 ### Managing Inventory
 
@@ -215,11 +217,18 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 1.6.0 (Current)
-- Barcode scanner - scan product codes with phone camera to auto-fill item data
+### Version 1.7.0 (Current)
+- Replaced barcode scanner with native BarcodeDetector API for accurate reads
+- Removed html5-qrcode (ZXing-js) library — fixed incorrect barcode values
+- Added barcode checksum validation (EAN-13, EAN-8, UPC-A)
+- iOS: camera scanning not supported, use manual barcode input
+
+### Version 1.6.x
+- Barcode scanner with html5-qrcode library
+- Manual barcode input field
 - Open Food Facts API integration for automatic product lookup
 - Auto-category mapping from product data
-- Supported barcode formats: EAN-13, EAN-8, UPC-A, UPC-E, CODE-128, CODE-39
+- Continuous autofocus and UPC-A to EAN-13 conversion
 
 ### Version 1.5.8
 - Initial public release
