@@ -331,9 +331,11 @@ class ApocalypseStockCard extends HTMLElement {
 
     this._html5QrCode.start(
       { facingMode: { exact: 'environment' } },
-      { fps: 10, qrbox: { width: 280, height: 150 },
+      { fps: 5, qrbox: { width: 350, height: 120 },
         videoConstraints: {
           facingMode: { exact: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
           advanced: [{ focusMode: 'continuous' }]
         }
       },
@@ -348,8 +350,13 @@ class ApocalypseStockCard extends HTMLElement {
         const video = document.getElementById('apo-scanner-reader')?.querySelector('video');
         if (video && video.srcObject) {
           const track = video.srcObject.getVideoTracks()[0];
-          if (track && track.getCapabilities && track.getCapabilities().focusMode) {
+          const caps = track.getCapabilities && track.getCapabilities();
+          if (caps && caps.focusMode) {
             track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          }
+          // Wyższa rozdzielczość jeśli dostępna
+          if (caps && caps.width) {
+            track.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } });
           }
         }
       } catch (_) {}
@@ -382,48 +389,53 @@ class ApocalypseStockCard extends HTMLElement {
   }
 
   async _lookupBarcode(barcode) {
-    // UPC-A (12 cyfr) to EAN-13 bez wiodącego zera - uzupełnij do 13
-    if (/^\d{12}$/.test(barcode)) {
-      barcode = '0' + barcode;
+    this._setScanStatus(`Zeskanowano: ${barcode} — szukam...`);
+
+    // Próbuj oryginalny kod, a jeśli nie znajdzie i ma 12 cyfr, spróbuj z wiodącym zerem (UPC-A → EAN-13)
+    let data = await this._fetchProduct(barcode);
+    if (!data && /^\d{12}$/.test(barcode)) {
+      data = await this._fetchProduct('0' + barcode);
     }
-    this._setScanStatus(`Szukam produktu: ${barcode}...`);
+    if (!data) {
+      this._setScanStatus(`Nie znaleziono produktu (kod: ${barcode})`);
+      return;
+    }
+
+    const p = data;
+    const root = this.shadowRoot;
+
+    // Nazwa
+    root.getElementById('in-name').value = p.product_name || p.product_name_pl || '';
+    // Marka
+    root.getElementById('in-brand').value = p.brands || '';
+    // Gramatura
+    const weight = p.product_quantity || p.quantity || '';
+    root.getElementById('in-weight').value = String(weight).replace(/[^\d.,]/g, '');
+    // Kalorie - przeliczenie z kcal/100g na porcję
+    const kcal100 = p.nutriments && p.nutriments['energy-kcal_100g'];
+    const weightNum = parseFloat(String(weight).replace(/[^\d.,]/g, '').replace(',', '.'));
+    if (kcal100 && weightNum) {
+      root.getElementById('in-cal').value = Math.round(kcal100 * weightNum / 100);
+    } else if (kcal100) {
+      root.getElementById('in-cal').value = Math.round(kcal100);
+    }
+
+    // Mapowanie kategorii
+    const category = this._mapCategory(p.categories_tags || [], p.categories || '');
+    if (category) {
+      root.getElementById('in-cat').value = category;
+    }
+
+    this._setScanStatus(`Znaleziono: ${p.product_name || barcode}`);
+  }
+
+  async _fetchProduct(code) {
     try {
-      const resp = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      const resp = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
       const data = await resp.json();
-      if (data.status !== 1 || !data.product) {
-        this._setScanStatus(`Nie znaleziono produktu (${barcode})`);
-        return;
-      }
-
-      const p = data.product;
-      const root = this.shadowRoot;
-
-      // Nazwa
-      root.getElementById('in-name').value = p.product_name || p.product_name_pl || '';
-      // Marka
-      root.getElementById('in-brand').value = p.brands || '';
-      // Gramatura
-      const weight = p.product_quantity || p.quantity || '';
-      root.getElementById('in-weight').value = String(weight).replace(/[^\d.,]/g, '');
-      // Kalorie - przeliczenie z kcal/100g na porcję
-      const kcal100 = p.nutriments && p.nutriments['energy-kcal_100g'];
-      const weightNum = parseFloat(String(weight).replace(/[^\d.,]/g, '').replace(',', '.'));
-      if (kcal100 && weightNum) {
-        root.getElementById('in-cal').value = Math.round(kcal100 * weightNum / 100);
-      } else if (kcal100) {
-        root.getElementById('in-cal').value = Math.round(kcal100);
-      }
-
-      // Mapowanie kategorii
-      const category = this._mapCategory(p.categories_tags || [], p.categories || '');
-      if (category) {
-        root.getElementById('in-cat').value = category;
-      }
-
-      this._setScanStatus(`Znaleziono: ${p.product_name || barcode}`);
-    } catch (e) {
-      this._setScanStatus(`Błąd pobierania danych (${barcode})`);
-    }
+      if (data.status === 1 && data.product) return data.product;
+    } catch (_) {}
+    return null;
   }
 
   _mapCategory(tags, categoriesStr) {
