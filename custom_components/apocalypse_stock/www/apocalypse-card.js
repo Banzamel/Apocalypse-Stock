@@ -330,14 +330,30 @@ class ApocalypseStockCard extends HTMLElement {
     this._scannerActive = true;
 
     this._html5QrCode.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: { width: 280, height: 150 } },
+      { facingMode: { exact: 'environment' } },
+      { fps: 10, qrbox: { width: 280, height: 150 },
+        videoConstraints: {
+          facingMode: { exact: 'environment' },
+          advanced: [{ focusMode: 'continuous' }]
+        }
+      },
       (decodedText) => {
         this._stopScanner();
         this._lookupBarcode(decodedText);
       },
       () => {} // ignoruj błędy skanowania (brak kodu w kadrze)
-    ).catch(err => {
+    ).then(() => {
+      // Wymuszenie ciągłego autofocusa po uruchomieniu kamery
+      try {
+        const video = document.getElementById('apo-scanner-reader')?.querySelector('video');
+        if (video && video.srcObject) {
+          const track = video.srcObject.getVideoTracks()[0];
+          if (track && track.getCapabilities && track.getCapabilities().focusMode) {
+            track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          }
+        }
+      } catch (_) {}
+    }).catch(err => {
       this._stopScanner();
       this._setScanStatus('Brak dostępu do kamery: ' + err);
     });
