@@ -351,6 +351,8 @@ class ApocalypseStockCard extends HTMLElement {
       });
 
       video.srcObject = this._stream;
+      video.muted = true;
+      await video.play();
 
       // Ciągły autofocus
       try {
