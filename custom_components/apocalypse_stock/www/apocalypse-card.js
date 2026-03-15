@@ -78,6 +78,11 @@ class ApocalypseStockCard extends HTMLElement {
         .btn-qty { background: var(--primary-color); border: none; color: white; border-radius: 4px; cursor: pointer; width: 26px; height: 26px; font-weight: bold; }
         .btn-add { background: var(--accent-color); color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }
         .btn-del { color: var(--error-color); cursor: pointer; background: none; border: none; font-size: 1.1em; padding: 0 5px; }
+        .btn-edit { color: var(--primary-color); cursor: pointer; background: none; border: none; font-size: 1em; padding: 0 5px; }
+
+        #edit-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 10001; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+        .edit-modal-content { background: var(--ha-card-background, var(--card-background-color, white)); padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
+        .edit-modal-content input, .edit-modal-content select { width: 100%; margin: 8px 0; padding: 10px; box-sizing: border-box; border-radius: 4px; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); }
 
         #add-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
         .modal-content { background: var(--ha-card-background, var(--card-background-color, white)); padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
@@ -103,7 +108,7 @@ class ApocalypseStockCard extends HTMLElement {
           <input type="text" id="search-input" placeholder="Szukaj...">
           <select id="filter-category">
             <option value="all">Wszystkie kategorie</option>
-            <option value="Owoce">Instant</option>
+            <option value="Instant">Instant</option>
             <option value="Suche">Suche</option>
             <option value="Słodkie">Słodkie</option>
 			<option value="Gotowe">Gotowe D.</option>
@@ -113,6 +118,8 @@ class ApocalypseStockCard extends HTMLElement {
 			<option value="Przyprawy">Przyprawy</option>
 			<option value="Medykamenty">Medykamenty</option>
 			<option value="Energetyczne">Energetyczne</option>
+			<option value="Napoje">Napoje</option>
+			<option value="Alkohol">Alkohol</option>
             <option value="Inne">Inne</option>
           </select>
         </div>
@@ -129,7 +136,7 @@ class ApocalypseStockCard extends HTMLElement {
             </div>
             <div class="scan-status" id="scan-status"></div>
             <select id="in-cat">
-				<option value="Owoce">Instant</option>
+				<option value="Instant">Instant</option>
 				<option value="Suche">Suche</option>
 				<option value="Słodkie">Słodkie</option>
 				<option value="Gotowe">Gotowe D.</option>
@@ -139,6 +146,8 @@ class ApocalypseStockCard extends HTMLElement {
 				<option value="Przyprawy">Przyprawy</option>
 				<option value="Medykamenty">Medykamenty</option>
 				<option value="Energetyczne">Energetyczne</option>
+				<option value="Napoje">Napoje</option>
+				<option value="Alkohol">Alkohol</option>
 				<option value="Inne">Inne</option>
             </select>
             <input type="text" id="in-name" placeholder="Nazwa produktu">
@@ -149,6 +158,31 @@ class ApocalypseStockCard extends HTMLElement {
             <div style="display: flex; gap: 10px; margin-top: 15px;">
               <button class="btn-add" id="save-item" style="flex: 2;">ZAPISZ</button>
               <button id="close-modal" style="flex: 1; cursor: pointer; background:none; border: 1px solid var(--divider-color); color:var(--primary-text-color); border-radius: 25px;">ANULUJ</button>
+            </div>
+          </div>
+        </div>
+        <div id="edit-modal">
+          <div class="edit-modal-content">
+            <h3>Edytuj produkt</h3>
+            <select id="edit-cat">
+				<option value="Instant">Instant</option>
+				<option value="Suche">Suche</option>
+				<option value="Słodkie">Słodkie</option>
+				<option value="Gotowe">Gotowe D.</option>
+				<option value="Konserwy">Konserwy</option>
+				<option value="Przetwory">Przetwory</option>
+				<option value="Pomidory">Pomidory</option>
+				<option value="Przyprawy">Przyprawy</option>
+				<option value="Medykamenty">Medykamenty</option>
+				<option value="Energetyczne">Energetyczne</option>
+				<option value="Napoje">Napoje</option>
+				<option value="Alkohol">Alkohol</option>
+				<option value="Inne">Inne</option>
+            </select>
+            <input type="text" id="edit-name" placeholder="Nazwa produktu">
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+              <button class="btn-add" id="save-edit" style="flex: 2;">ZAPISZ</button>
+              <button id="close-edit-modal" style="flex: 1; cursor: pointer; background:none; border: 1px solid var(--divider-color); color:var(--primary-text-color); border-radius: 25px;">ANULUJ</button>
             </div>
           </div>
         </div>
@@ -207,7 +241,7 @@ class ApocalypseStockCard extends HTMLElement {
               </tr>
             </thead>
             <tbody>
-              ${groups[cat].map(item => `
+              ${groups[cat].sort((a, b) => a.name.localeCompare(b.name)).map(item => `
                 <tr>
                   <td>
 					<strong>${item.name}</strong><br/>
@@ -223,7 +257,10 @@ class ApocalypseStockCard extends HTMLElement {
                       <button class="btn-qty" onclick="this.getRootNode().host._updateQty(${item.id}, 1)">+</button>
                     </div>
                   </td>
-                  <td><button class="btn-del" onclick="this.getRootNode().host._deleteItem(${item.id})">✕</button></td>
+                  <td>
+                    <button class="btn-edit" onclick="this.getRootNode().host._editItem(${item.id})">✏️</button>
+                    <button class="btn-del" onclick="this.getRootNode().host._deleteItem(${item.id})">✕</button>
+                  </td>
                 </tr>
               `).join('')}
             </tbody>
@@ -257,7 +294,7 @@ class ApocalypseStockCard extends HTMLElement {
       root.getElementById('in-weight').value = '';
       root.getElementById('in-expiry').value = '';
       root.getElementById('in-cal').value = '';
-      root.getElementById('in-cat').value = 'Owoce';
+      root.getElementById('in-cat').value = 'Instant';
     };
 
     root.getElementById('close-modal').onclick = () => {
@@ -299,6 +336,23 @@ class ApocalypseStockCard extends HTMLElement {
       root.getElementById('add-modal').style.display = 'none';
       this._updateDynamicContent();
       this._saveToHA(); // Zapis do sensora
+    };
+
+    root.getElementById('close-edit-modal').onclick = () => {
+      root.getElementById('edit-modal').style.display = 'none';
+      this._editingItemId = null;
+    };
+
+    root.getElementById('save-edit').onclick = () => {
+      const item = this.items.find(i => i.id === this._editingItemId);
+      if (item) {
+        item.category = root.getElementById('edit-cat').value;
+        item.name = root.getElementById('edit-name').value || item.name;
+        this._updateDynamicContent();
+        this._saveToHA();
+      }
+      root.getElementById('edit-modal').style.display = 'none';
+      this._editingItemId = null;
     };
   }
 
@@ -565,7 +619,7 @@ class ApocalypseStockCard extends HTMLElement {
   _mapCategory(tags, categoriesStr) {
     const all = [...tags, ...categoriesStr.toLowerCase().split(',')].map(c => c.toLowerCase());
     const map = [
-      { keywords: ['instant', 'noodle', 'zupk'], category: 'Owoce' },
+      { keywords: ['instant', 'noodle', 'zupk'], category: 'Instant' },
       { keywords: ['dried', 'dry', 'rice', 'pasta', 'flour', 'cereal', 'grain', 'suche', 'ryż', 'makaron', 'mąka', 'kasza', 'płatki'], category: 'Suche' },
       { keywords: ['chocolate', 'candy', 'sweet', 'sugar', 'biscuit', 'cookie', 'wafer', 'czekolad', 'cukier', 'słodycz', 'ciastk', 'wafel'], category: 'Słodkie' },
       { keywords: ['ready', 'meal', 'prepared', 'gotowe', 'danie'], category: 'Gotowe' },
@@ -575,6 +629,8 @@ class ApocalypseStockCard extends HTMLElement {
       { keywords: ['spice', 'herb', 'seasoning', 'przypraw', 'zioł'], category: 'Przyprawy' },
       { keywords: ['medicine', 'pharma', 'supplement', 'vitamin', 'medic', 'lek', 'witamin', 'suplement'], category: 'Medykamenty' },
       { keywords: ['energy', 'bar:', 'protein', 'sport', 'energet', 'baton'], category: 'Energetyczne' },
+      { keywords: ['beverage', 'drink', 'water', 'juice', 'soda', 'tea', 'coffee', 'napój', 'napoj', 'woda', 'sok', 'herbat', 'kawa'], category: 'Napoje' },
+      { keywords: ['alcohol', 'beer', 'wine', 'vodka', 'whisky', 'rum', 'liquor', 'spirit', 'alkohol', 'piwo', 'wino', 'wódka', 'whiskey'], category: 'Alkohol' },
     ];
 
     for (const { keywords, category } of map) {
@@ -583,6 +639,16 @@ class ApocalypseStockCard extends HTMLElement {
       }
     }
     return 'Inne';
+  }
+
+  _editItem(id) {
+    const item = this.items.find(i => i.id === id);
+    if (!item) return;
+    const root = this.shadowRoot;
+    this._editingItemId = id;
+    root.getElementById('edit-cat').value = item.category;
+    root.getElementById('edit-name').value = item.name;
+    root.getElementById('edit-modal').style.display = 'flex';
   }
 
   _updateQty(id, delta) {

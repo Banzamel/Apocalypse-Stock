@@ -14,7 +14,8 @@ A comprehensive supply management integration for Home Assistant. Track your eme
 - **🔍 Smart Search & Filtering** - Quickly find items by name, brand, or filter by category
 - **📊 Real-time Calorie Tracking** - Automatic calculation of total available calories based on quantities
 - **📅 Expiration Date Monitoring** - Keep track of expiration dates for all your supplies
-- **🏷️ Category Organization** - Organize items into 11 collapsible categories
+- **🏷️ Category Organization** - Organize items into 13 collapsible categories
+- **✏️ Edit Products** - Change name and category of existing items
 - **💾 Persistent Storage** - All data is automatically saved and persists across restarts
 - **🎨 Beautiful Custom Card** - Modern, responsive Lovelace card with intuitive UI
 - **📷 Barcode Scanner** - Scan product barcodes with your phone camera to quickly add items using Open Food Facts database
@@ -33,6 +34,8 @@ Items can be organized into the following categories:
 - 🧂 Spices
 - 💊 Medications
 - ⚡ Energy foods
+- 🥤 Beverages (Napoje)
+- 🍷 Alcohol (Alkohol)
 - 📦 Other
 
 ## 📥 Installation
@@ -218,7 +221,14 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 1.9.1 (Current)
+### Version 2.0.2 (Current)
+- Alphabetical sorting of products within categories
+- Added new categories: Napoje (Beverages) and Alkohol (Alcohol)
+- Fixed category selection bug — internal values now match display names (Owoce → Instant)
+- Added product editing — change name and category of existing items via edit button
+- Auto-mapping for new categories from Open Food Facts data
+
+### Version 1.9.1
 - Replaced Tesseract.js OCR with BarcodeDetector library (native API + ZXing WASM polyfill)
 - Proper barcode scanning from camera instead of OCR digit recognition
 - Supports EAN-13, EAN-8, UPC-A, Code 128 formats
