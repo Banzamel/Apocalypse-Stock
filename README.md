@@ -106,15 +106,16 @@ type: custom:apocalypse-stock-card
 
 1. Click **"+ DODAJ"** to open the add item modal
 2. Click **"📷"** to scan or type the barcode manually in the input field and click **"🔍"**
-3. Point your phone camera at the product barcode (EAN-13, EAN-8, UPC-A, UPC-E, CODE-128, CODE-39 supported)
-4. The form will be automatically filled with product data from Open Food Facts:
+3. Point your phone camera at the **barcode** — position it inside the red guide frame
+4. The scanner detects the barcode using BarcodeDetector (native API or ZXing WASM polyfill) and validates the checksum
+5. For **13-digit EAN codes**, the form will be automatically filled with product data from Open Food Facts:
    - Product name and brand
    - Weight in grams
    - Calories (calculated per unit based on kcal/100g)
    - Auto-mapped category
-5. Review and adjust the data, then click **"ZAPISZ"** (Save)
+6. Review and adjust the data, then click **"ZAPISZ"** (Save)
 
-> **Note**: Camera scanning requires the native BarcodeDetector API (Android / Chrome / Edge). On **iOS (Safari)** camera scanning is not available — use the manual barcode input field instead.
+> **Note**: Barcode scanning uses the native BarcodeDetector API (Chrome/Android) with automatic ZXing WASM fallback for other browsers. Use the torch button for better illumination if needed.
 
 ### Managing Inventory
 
@@ -217,7 +218,35 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 1.8.0 (Current)
+### Version 1.9.1 (Current)
+- Replaced Tesseract.js OCR with BarcodeDetector library (native API + ZXing WASM polyfill)
+- Proper barcode scanning from camera instead of OCR digit recognition
+- Supports EAN-13, EAN-8, UPC-A, Code 128 formats
+- Barcode checksum validation after each read
+- API product lookup restricted to 13-digit EAN codes only
+- Faster scan loop (250ms vs 800ms) thanks to native barcode detection
+- Double-read confirmation still active for reliable scanning
+
+### Version 1.9.0
+- Replaced BarcodeDetector with OCR digit recognition (Tesseract.js)
+- Reads 13-digit EAN code from numbers printed below barcode
+- Visual guide frame showing where to position the barcode digits
+- Image preprocessing (grayscale + high contrast) for better OCR accuracy
+- Double-read confirmation (same code recognized 2x) before accepting
+- Camera and OCR engine load in parallel for faster startup
+- Works in all browsers and WebViews (no native API dependency)
+
+### Version 1.8.2
+- Rewritten camera scanner — single stream with applyConstraints for native max resolution
+- Fixed camera showing snowy/low-quality image (was reopening stream with lost deviceId)
+- Fixed scanner not closing (robust cleanup with try-catch on every step)
+- Canvas-based barcode detection at native resolution instead of scaled video element
+- Added `object-fit: contain` to prevent image distortion/zoom
+- Shows actual camera resolution in scanner overlay for debugging
+- Torch button with proper on/off toggle state
+
+### Version 1.8.1
+- Fixed low camera resolution in WebView — two-step stream init to request max resolution
 - Improved camera autofocus for barcode scanning (close-range focus distance)
 - Added tap-to-focus — tap the camera preview to re-trigger autofocus
 - Added torch/flashlight button for better barcode illumination

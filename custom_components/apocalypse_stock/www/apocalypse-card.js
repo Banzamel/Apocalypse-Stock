@@ -302,16 +302,20 @@ class ApocalypseStockCard extends HTMLElement {
     };
   }
 
-  async _startScanner() {
-    // Sprawdź czy BarcodeDetector jest dostępny (Chrome/Android)
-    if (!('BarcodeDetector' in window)) {
-      this._setScanStatus('Skaner niedostępny w tej przeglądarce — wpisz kod ręcznie');
-      return;
+  async _getBarcodeDetector() {
+    if ('BarcodeDetector' in window) {
+      try {
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        if (formats.includes('ean_13')) return window.BarcodeDetector;
+      } catch (_) {}
     }
+    const module = await import('https://fastly.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js');
+    return module.default || module.BarcodeDetector;
+  }
 
-    // Tworzenie nakładki skanera
+  async _startScanner() {
+    // Nakładka skanera
     this._scannerOverlay = document.createElement('div');
-    this._scannerOverlay.id = 'apo-scanner-overlay';
     this._scannerOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
 
     const videoContainer = document.createElement('div');
@@ -321,28 +325,36 @@ class ApocalypseStockCard extends HTMLElement {
     video.setAttribute('playsinline', '');
     video.setAttribute('autoplay', '');
     video.setAttribute('muted', '');
-    video.style.cssText = 'width:100%;border-radius:8px;';
+    video.style.cssText = 'width:100%;border-radius:8px;object-fit:contain;';
 
-    // Linia celownika
+    // Ramka celownika — prostokąt wskazujący gdzie umieścić cyfry kodu
     const guide = document.createElement('div');
-    guide.style.cssText = 'position:absolute;left:10%;right:10%;top:50%;height:2px;background:#f44336;box-shadow:0 0 8px rgba(244,67,54,0.8);transform:translateY(-50%);pointer-events:none;';
+    guide.style.cssText = 'position:absolute;left:10%;right:10%;top:40%;height:20%;border:2px solid #f44336;border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0.4);pointer-events:none;';
+
+    const guideLabel = document.createElement('div');
+    guideLabel.textContent = 'Umieść kod kreskowy w ramce';
+    guideLabel.style.cssText = 'position:absolute;left:0;right:0;bottom:-24px;text-align:center;color:#f44336;font-size:0.75em;font-weight:bold;';
+    guide.appendChild(guideLabel);
+
+    const statusInfo = document.createElement('div');
+    statusInfo.style.cssText = 'color:#aaa;font-size:0.8em;margin-top:8px;text-align:center;min-height:1.5em;';
 
     const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:12px;margin-top:20px;';
+    btnRow.style.cssText = 'display:flex;gap:12px;margin-top:12px;';
 
+    let torchOn = false;
     const torchBtn = document.createElement('button');
     torchBtn.textContent = '🔦 LATARKA';
     torchBtn.style.cssText = 'padding:12px 24px;font-size:1em;background:#607d8b;color:white;border:none;border-radius:25px;cursor:pointer;font-weight:bold;';
     torchBtn.onclick = async () => {
-      if (!this._stream) return;
-      const track = this._stream.getVideoTracks()[0];
       try {
+        const track = this._stream && this._stream.getVideoTracks()[0];
+        if (!track) return;
         const caps = track.getCapabilities ? track.getCapabilities() : {};
-        if (caps.torch) {
-          const settings = track.getSettings();
-          await track.applyConstraints({ advanced: [{ torch: !settings.torch }] });
-          torchBtn.style.background = settings.torch ? '#607d8b' : '#ff9800';
-        }
+        if (!caps.torch) return;
+        torchOn = !torchOn;
+        await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+        torchBtn.style.background = torchOn ? '#ff9800' : '#607d8b';
       } catch (_) {}
     };
 
@@ -356,66 +368,52 @@ class ApocalypseStockCard extends HTMLElement {
     btnRow.appendChild(torchBtn);
     btnRow.appendChild(cancelBtn);
     this._scannerOverlay.appendChild(videoContainer);
+    this._scannerOverlay.appendChild(statusInfo);
     this._scannerOverlay.appendChild(btnRow);
     document.body.appendChild(this._scannerOverlay);
 
     this._scannerActive = true;
+    statusInfo.textContent = 'Ładowanie skanera...';
 
     try {
-      this._stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 },
-          focusMode: { ideal: 'continuous' },
-        },
-        audio: false
-      });
+      // Ładuj BarcodeDetector i otwieraj kamerę równolegle
+      const [DetectorClass] = await Promise.all([
+        this._getBarcodeDetector(),
+        (async () => {
+          this._stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false
+          });
 
-      video.srcObject = this._stream;
-      video.muted = true;
-      await video.play();
-
-      // Zaawansowane ustawienia ostrości
-      try {
-        const track = this._stream.getVideoTracks()[0];
-        const caps = track.getCapabilities ? track.getCapabilities() : {};
-        const advancedConstraints = [];
-
-        if (caps.focusMode && caps.focusMode.includes('continuous')) {
-          advancedConstraints.push({ focusMode: 'continuous' });
-        }
-        // Bliska odległość ogniskowania dla skanowania z bliska
-        if (caps.focusDistance) {
-          const minDist = caps.focusDistance.min || 0;
-          const maxDist = caps.focusDistance.max || 1;
-          // Ustaw ostrość na bliski zakres (ok. 10-20cm) — dolne 15% zakresu
-          const closeDist = minDist + (maxDist - minDist) * 0.15;
-          advancedConstraints.push({ focusDistance: closeDist });
-        }
-
-        if (advancedConstraints.length > 0) {
-          await track.applyConstraints({ advanced: advancedConstraints });
-        }
-      } catch (_) {}
-
-      // Tap-to-focus: dotknięcie ekranu wymusza refocus
-      video.onclick = async () => {
-        try {
           const track = this._stream.getVideoTracks()[0];
-          const caps = track.getCapabilities ? track.getCapabilities() : {};
-          if (caps.focusMode && caps.focusMode.includes('manual')) {
-            // Przełącz na manual i z powrotem na continuous — wymusza ponowne złapanie ostrości
-            await track.applyConstraints({ advanced: [{ focusMode: 'manual' }] });
-            await new Promise(r => setTimeout(r, 100));
-            await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-          }
-        } catch (_) {}
-      };
 
-      const detector = new BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
-      });
+          // Maksymalna rozdzielczość kamery + autofocus
+          try {
+            const caps = track.getCapabilities ? track.getCapabilities() : {};
+            const constraints = {};
+            if (caps.width && caps.width.max) constraints.width = { ideal: caps.width.max };
+            if (caps.height && caps.height.max) constraints.height = { ideal: caps.height.max };
+            if (caps.focusMode && caps.focusMode.includes('continuous')) {
+              constraints.focusMode = 'continuous';
+            }
+            if (Object.keys(constraints).length > 0) {
+              await track.applyConstraints(constraints);
+            }
+          } catch (_) {}
+
+          video.srcObject = this._stream;
+          video.muted = true;
+          await video.play();
+        })()
+      ]);
+
+      const detector = new DetectorClass({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128'] });
+
+      const settings = this._stream.getVideoTracks()[0].getSettings();
+      statusInfo.textContent = `Skanowanie... (${settings.width || video.videoWidth}x${settings.height || video.videoHeight})`;
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
 
       let confirmCode = null;
       let confirmCount = 0;
@@ -424,34 +422,43 @@ class ApocalypseStockCard extends HTMLElement {
         if (!this._scannerActive) return;
         try {
           if (video.readyState >= 2) {
-            const results = await detector.detect(video);
-            if (results.length > 0) {
-              const code = results[0].rawValue;
-              if (this._validateBarcode(code)) {
-                // Potwierdź odczyt — ten sam kod 2x pod rząd eliminuje błędne odczyty
-                if (code === confirmCode) {
-                  confirmCount++;
-                } else {
-                  confirmCode = code;
-                  confirmCount = 1;
-                }
-                if (confirmCount >= 2) {
-                  this._stopScanner();
-                  this.shadowRoot.getElementById('in-barcode').value = code;
-                  this._lookupBarcode(code);
-                  return;
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            if (vw && vh) {
+              canvas.width = vw;
+              canvas.height = vh;
+              ctx.drawImage(video, 0, 0, vw, vh);
+
+              const barcodes = await detector.detect(canvas);
+              for (const barcode of barcodes) {
+                const code = barcode.rawValue;
+                if (code && this._validateBarcode(code)) {
+                  if (code === confirmCode) {
+                    confirmCount++;
+                  } else {
+                    confirmCode = code;
+                    confirmCount = 1;
+                  }
+                  statusInfo.textContent = `Odczytano: ${code} (${confirmCount}/2)`;
+                  if (confirmCount >= 2) {
+                    this._stopScanner();
+                    this.shadowRoot.getElementById('in-barcode').value = code;
+                    this._lookupBarcode(code);
+                    return;
+                  }
                 }
               }
             }
           }
         } catch (_) {}
-        this._scanTimer = setTimeout(scanLoop, 200);
+        this._scanTimer = setTimeout(scanLoop, 250);
       };
 
       video.onloadeddata = () => scanLoop();
+      if (video.readyState >= 2) scanLoop();
     } catch (err) {
       this._stopScanner();
-      this._setScanStatus('Brak dostępu do kamery: ' + err.message);
+      this._setScanStatus('Błąd skanera: ' + err.message);
     }
   }
 
@@ -463,15 +470,19 @@ class ApocalypseStockCard extends HTMLElement {
       this._scanTimer = null;
     }
 
-    if (this._stream) {
-      this._stream.getTracks().forEach(t => t.stop());
-      this._stream = null;
-    }
+    try {
+      if (this._stream) {
+        this._stream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+        this._stream = null;
+      }
+    } catch (_) {}
 
-    if (this._scannerOverlay) {
-      this._scannerOverlay.remove();
-      this._scannerOverlay = null;
-    }
+    try {
+      if (this._scannerOverlay) {
+        this._scannerOverlay.remove();
+        this._scannerOverlay = null;
+      }
+    } catch (_) {}
   }
 
   _setScanStatus(msg) {
@@ -504,13 +515,16 @@ class ApocalypseStockCard extends HTMLElement {
 
   async _lookupBarcode(barcode) {
     this.shadowRoot.getElementById('in-barcode').value = barcode;
-    this._setScanStatus(`Zeskanowano: ${barcode} — szukam...`);
 
-    // Próbuj oryginalny kod, a jeśli nie znajdzie i ma 12 cyfr, spróbuj z wiodącym zerem (UPC-A → EAN-13)
-    let data = await this._fetchProduct(barcode);
-    if (!data && /^\d{12}$/.test(barcode)) {
-      data = await this._fetchProduct('0' + barcode);
+    // Wyszukuj w API tylko kody EAN-13 (dokładnie 13 cyfr)
+    if (!/^\d{13}$/.test(barcode)) {
+      this._setScanStatus(`Kod: ${barcode} — wyszukiwanie tylko dla kodów EAN-13 (13 cyfr)`);
+      return;
     }
+
+    this._setScanStatus(`Kod: ${barcode} — szukam produktu...`);
+
+    const data = await this._fetchProduct(barcode);
     if (!data) {
       this._setScanStatus(`Nie znaleziono produktu (kod: ${barcode})`);
       return;
@@ -519,14 +533,10 @@ class ApocalypseStockCard extends HTMLElement {
     const p = data;
     const root = this.shadowRoot;
 
-    // Nazwa
     root.getElementById('in-name').value = p.product_name || p.product_name_pl || '';
-    // Marka
     root.getElementById('in-brand').value = p.brands || '';
-    // Gramatura
     const weight = p.product_quantity || p.quantity || '';
     root.getElementById('in-weight').value = String(weight).replace(/[^\d.,]/g, '');
-    // Kalorie - przeliczenie z kcal/100g na porcję
     const kcal100 = p.nutriments && p.nutriments['energy-kcal_100g'];
     const weightNum = parseFloat(String(weight).replace(/[^\d.,]/g, '').replace(',', '.'));
     if (kcal100 && weightNum) {
@@ -535,7 +545,6 @@ class ApocalypseStockCard extends HTMLElement {
       root.getElementById('in-cal').value = Math.round(kcal100);
     }
 
-    // Mapowanie kategorii
     const category = this._mapCategory(p.categories_tags || [], p.categories || '');
     if (category) {
       root.getElementById('in-cat').value = category;
