@@ -10,5 +10,17 @@
       "single_instance_allowed": "Only one instance of Apocalypse Stock is allowed. The integration is already configured."
     }
   },
-  "title": "Apocalypse Stock"
+  "title": "Apocalypse Stock",
+  "services": {
+    "update_stock": {
+      "name": "Update stock",
+      "description": "Replaces the full list of stored items (used by the Lovelace card).",
+      "fields": {
+        "items": {
+          "name": "Items",
+          "description": "List of item objects."
+        }
+      }
+    }
+  }
 }

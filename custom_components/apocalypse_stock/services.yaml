@@ -1,0 +1,7 @@
+update_stock:
+  fields:
+    items:
+      required: true
+      example: '[{"id": 1, "name": "Ryż", "category": "Suche", "qty": 2}]'
+      selector:
+        object:

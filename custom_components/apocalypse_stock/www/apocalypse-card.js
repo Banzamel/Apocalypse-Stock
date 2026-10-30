@@ -14,25 +14,43 @@ class ApocalypseStockCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this.config = config;
+    this.config = config || {};
+  }
+
+  static getStubConfig() {
+    return {};
+  }
+
+  getCardSize() {
+    return 8;
   }
 
   set hass(hass) {
     this._hass = hass;
     const entityId = 'sensor.apocalypse_stock_data';
     const stateObj = hass.states[entityId];
-    
-    // Pobieranie danych z sensora nowej integracji
-    if (stateObj && stateObj.attributes.items) {
-      this.items = stateObj.attributes.items;
-    }
 
     if (!this.shadowRoot.innerHTML) this._createSkeleton();
-    
+
+    // HA wywołuje setter przy każdej zmianie dowolnej encji - reagujemy tylko na nasz sensor
+    if (stateObj === this._lastStateObj) return;
+    this._lastStateObj = stateObj;
+
+    // Kopia danych z sensora - nie modyfikujemy obiektu stanu HA bezpośrednio
+    if (stateObj && Array.isArray(stateObj.attributes.items)) {
+      this.items = JSON.parse(JSON.stringify(stateObj.attributes.items));
+    }
+
     // Odświeżaj listę tylko gdy nie wypełniasz właśnie formularza
     if (!this._modalOpen) {
       this._updateDynamicContent();
     }
+  }
+
+  _esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
   }
 
   // Komunikacja z nowym serwisem w Pythonie
@@ -43,7 +61,9 @@ class ApocalypseStockCard extends HTMLElement {
   }
 
   // Zapamiętywanie stanu otwarcia sekcji
-  _handleToggle(e, cat) {
+  _handleToggle(e) {
+    const cat = e.target.dataset && e.target.dataset.cat;
+    if (cat === undefined) return;
     if (e.target.open) {
       this._openCategories.add(cat);
     } else {
@@ -198,15 +218,16 @@ class ApocalypseStockCard extends HTMLElement {
     const stats = root.getElementById('stats-container');
 
     // Filtrowanie
+    const query = this._searchQuery.toLowerCase();
     const filtered = this.items.filter(i => {
-      const mName = i.name.toLowerCase().includes(this._searchQuery.toLowerCase()) || 
-                    i.brand.toLowerCase().includes(this._searchQuery.toLowerCase());
+      const mName = String(i.name ?? '').toLowerCase().includes(query) ||
+                    String(i.brand ?? '').toLowerCase().includes(query);
       const mCat = this._filterCategory === 'all' || i.category === this._filterCategory;
       return mName && mCat;
     });
 
     // Suma kalorii
-    const totalKcal = filtered.reduce((sum, i) => sum + (i.calories * i.qty), 0);
+    const totalKcal = filtered.reduce((sum, i) => sum + ((Number(i.calories) || 0) * (Number(i.qty) || 0)), 0);
     stats.innerHTML = `(${totalKcal.toLocaleString()} kcal)`;
 
     // Grupowanie
@@ -226,9 +247,9 @@ class ApocalypseStockCard extends HTMLElement {
       const isOpen = (this._searchQuery.length > 0) || this._openCategories.has(cat);
       
       return `
-        <details ${isOpen ? 'open' : ''} ontoggle="this.getRootNode().host._handleToggle(event, '${cat}')">
+        <details ${isOpen ? 'open' : ''} data-cat="${this._esc(cat)}">
           <summary>
-            ${cat} 
+            ${this._esc(cat)} 
             <span class="cat-count">${groups[cat].length}</span>
           </summary>
           <table>
@@ -241,25 +262,25 @@ class ApocalypseStockCard extends HTMLElement {
               </tr>
             </thead>
             <tbody>
-              ${groups[cat].sort((a, b) => a.name.localeCompare(b.name)).map(item => `
+              ${groups[cat].sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''))).map(item => `
                 <tr>
                   <td>
-					<strong>${item.name}</strong><br/>
-					<small>${item.brand}</small><br/>
-					<small>${item.weight || '-'}g</small><br/>
-					<small>${item.calories} kcal</small>
+					<strong>${this._esc(item.name)}</strong><br/>
+					<small>${this._esc(item.brand)}</small><br/>
+					<small>${item.weight && item.weight !== '-' ? this._esc(item.weight) + 'g' : '-'}</small><br/>
+					<small>${this._esc(item.calories)} kcal</small>
 				  </td>
-                  <td><small>${item.expiry}</small></td>
+                  <td><small>${this._esc(item.expiry)}</small></td>
                   <td>
                     <div class="qty-controls">
-                      <button class="btn-qty" onclick="this.getRootNode().host._updateQty(${item.id}, -1)">-</button>
+                      <button class="btn-qty" onclick="this.getRootNode().host._updateQty(${Number(item.id)}, -1)">-</button>
                       <span>${item.qty}</span>
-                      <button class="btn-qty" onclick="this.getRootNode().host._updateQty(${item.id}, 1)">+</button>
+                      <button class="btn-qty" onclick="this.getRootNode().host._updateQty(${Number(item.id)}, 1)">+</button>
                     </div>
                   </td>
                   <td>
-                    <button class="btn-edit" onclick="this.getRootNode().host._editItem(${item.id})">✏️</button>
-                    <button class="btn-del" onclick="this.getRootNode().host._deleteItem(${item.id})">✕</button>
+                    <button class="btn-edit" onclick="this.getRootNode().host._editItem(${Number(item.id)})">✏️</button>
+                    <button class="btn-del" onclick="this.getRootNode().host._deleteItem(${Number(item.id)})">✕</button>
                   </td>
                 </tr>
               `).join('')}
@@ -272,7 +293,10 @@ class ApocalypseStockCard extends HTMLElement {
 
   _setupEventListeners() {
     const root = this.shadowRoot;
-    
+
+    // Delegacja zdarzenia toggle (nie bubbluje, więc nasłuchujemy w fazie capture)
+    root.getElementById('list-container').addEventListener('toggle', (e) => this._handleToggle(e), true);
+
     root.getElementById('search-input').addEventListener('input', (e) => {
       this._searchQuery = e.target.value;
       this._updateDynamicContent();
@@ -341,6 +365,8 @@ class ApocalypseStockCard extends HTMLElement {
     root.getElementById('close-edit-modal').onclick = () => {
       root.getElementById('edit-modal').style.display = 'none';
       this._editingItemId = null;
+      this._modalOpen = false;
+      this._updateDynamicContent();
     };
 
     root.getElementById('save-edit').onclick = () => {
@@ -353,6 +379,8 @@ class ApocalypseStockCard extends HTMLElement {
       }
       root.getElementById('edit-modal').style.display = 'none';
       this._editingItemId = null;
+      this._modalOpen = false;
+      this._updateDynamicContent();
     };
   }
 
@@ -646,6 +674,7 @@ class ApocalypseStockCard extends HTMLElement {
     if (!item) return;
     const root = this.shadowRoot;
     this._editingItemId = id;
+    this._modalOpen = true;
     root.getElementById('edit-cat').value = item.category;
     root.getElementById('edit-name').value = item.name;
     root.getElementById('edit-modal').style.display = 'flex';
@@ -669,4 +698,16 @@ class ApocalypseStockCard extends HTMLElement {
   }
 }
 
-customElements.define('apocalypse-stock-card', ApocalypseStockCard);
+if (!customElements.get('apocalypse-stock-card')) {
+  customElements.define('apocalypse-stock-card', ApocalypseStockCard);
+}
+
+// Rejestracja w wyborze kart edytora wizualnego
+window.customCards = window.customCards || [];
+if (!window.customCards.some(c => c.type === 'apocalypse-stock-card')) {
+  window.customCards.push({
+    type: 'apocalypse-stock-card',
+    name: 'Apocalypse Stock Card',
+    description: 'Zarządzanie zapasami żywności, datami ważności i kaloriami.'
+  });
+}

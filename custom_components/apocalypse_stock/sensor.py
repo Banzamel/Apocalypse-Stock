@@ -1,50 +1,47 @@
 import logging
+
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.helpers.storage import Store
+from homeassistant.core import callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+from .const import DOMAIN, SIGNAL_ITEMS_UPDATED
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "apocalypse_stock"
-STORAGE_KEY = f"{DOMAIN}.storage"
-STORAGE_VERSION = 1
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Konfiguracja sensora na podstawie wpisu z UI."""
-    store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-    stored_data = await store.async_load()
-    items = stored_data.get("items", []) if stored_data else []
-    
-    sensor = ApocalypseStockSensor(hass, store, items)
-    async_add_entities([sensor], True)
+    data = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities([ApocalypseStockSensor(data)])
 
-    async def handle_update_stock(call):
-        new_items = call.data.get("items")
-        await sensor.async_update_items(new_items)
-
-    hass.services.async_register(DOMAIN, "update_stock", handle_update_stock)
 
 class ApocalypseStockSensor(SensorEntity):
-    def __init__(self, hass, store, items):
-        self._hass = hass
-        self._store = store
-        self._items = items
-        self._attr_name = "Apocalypse Stock Data"
-        self._attr_unique_id = "apocalypse_stock_data_sensor"
-        self._attr_icon = "mdi:shield-alert"
+    _attr_name = "Apocalypse Stock Data"
+    _attr_unique_id = "apocalypse_stock_data_sensor"
+    _attr_icon = "mdi:shield-alert"
+    _attr_native_unit_of_measurement = "zasobów"
+    _attr_should_poll = False
+    # Lista produktów może być duża - nie zapisujemy jej w historii (recorder)
+    _unrecorded_attributes = frozenset({"items"})
+
+    def __init__(self, data):
+        self._data = data
+
+    async def async_added_to_hass(self):
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_ITEMS_UPDATED, self._handle_items_updated
+            )
+        )
+
+    @callback
+    def _handle_items_updated(self):
+        self.async_write_ha_state()
 
     @property
-    def state(self):
-        return len(self._items)
-
-    @property
-    def unit_of_measurement(self):
-        return "zasobów"
+    def native_value(self):
+        return len(self._data.items)
 
     @property
     def extra_state_attributes(self):
-        return {"items": self._items}
-
-    async def async_update_items(self, new_items):
-        self._items = new_items
-        await self._store.async_save({"items": self._items})
-        self.async_write_ha_state()
+        return {"items": self._data.items}

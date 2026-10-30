@@ -1,7 +1,7 @@
 from homeassistant import config_entries
 import voluptuous as vol
 
-DOMAIN = "apocalypse_stock"
+from .const import DOMAIN
 
 class ApocalypseStockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Obsługa okna konfiguracji integracji."""

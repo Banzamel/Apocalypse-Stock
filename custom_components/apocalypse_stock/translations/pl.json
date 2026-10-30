@@ -10,5 +10,17 @@
       "single_instance_allowed": "Dozwolona jest tylko jedna instancja Apocalypse Stock. Integracja jest już skonfigurowana."
     }
   },
-  "title": "Zapasy Apokaliptyczne"
+  "title": "Zapasy Apokaliptyczne",
+  "services": {
+    "update_stock": {
+      "name": "Aktualizuj zapasy",
+      "description": "Zastępuje całą listę zapisanych produktów (używane przez kartę Lovelace).",
+      "fields": {
+        "items": {
+          "name": "Produkty",
+          "description": "Lista obiektów produktów."
+        }
+      }
+    }
+  }
 }

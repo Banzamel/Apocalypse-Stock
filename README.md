@@ -160,8 +160,10 @@ type: custom:apocalypse-stock-card
 custom_components/apocalypse_stock/
 ├── __init__.py                 # Integration setup
 ├── config_flow.py             # Configuration flow
+├── const.py                   # Shared constants
 ├── manifest.json              # Integration metadata
 ├── sensor.py                  # Sensor entity
+├── services.yaml              # Service definitions
 ├── translations/
 │   ├── en.json               # English translations
 │   └── pl.json               # Polish translations
@@ -221,7 +223,19 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 2.0.2 (Current)
+### Version 2.0.3 (Current)
+- Fixed HTML injection — product names/brands (e.g. from Open Food Facts) are now escaped before rendering
+- Fixed card crash when an item has no brand or name
+- Fixed "Apocalypse Stock Card" missing from the visual card picker (registered in `window.customCards`)
+- Card no longer mutates Home Assistant state objects and re-renders only when the stock sensor changes
+- Edit modal no longer gets overwritten by background state updates
+- Fixed blocking file I/O in the event loop when reading `manifest.json`
+- Lovelace resource registration no longer fails in YAML mode (logs the URL to add manually)
+- `update_stock` service is now validated, documented (`services.yaml`) and removed on unload
+- Items list is excluded from the recorder database (prevents oversized-attribute warnings)
+- Minimum Home Assistant version raised to 2024.7.0 (required by `StaticPathConfig`)
+
+### Version 2.0.2
 - Alphabetical sorting of products within categories
 - Added new categories: Napoje (Beverages) and Alkohol (Alcohol)
 - Fixed category selection bug — internal values now match display names (Owoce → Instant)

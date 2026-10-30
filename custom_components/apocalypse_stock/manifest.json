@@ -1,11 +1,18 @@
 {
   "domain": "apocalypse_stock",
   "name": "Apocalypse Stock",
+  "after_dependencies": [
+    "lovelace"
+  ],
+  "codeowners": [
+    "@Banzamel"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/Banzamel/apocalypse-stock",
-  "issue_tracker": "https://github.com/Banzamel/apocalypse-stock/issues",
-  "dependencies": [],
-  "codeowners": ["@Banzamel"],
-  "version": "2.0.2",
   "iot_class": "local_push",
-  "config_flow": true
+  "issue_tracker": "https://github.com/Banzamel/apocalypse-stock/issues",
+  "version": "2.0.3"
 }
