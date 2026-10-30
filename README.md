@@ -306,6 +306,7 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ### Version 2.1.1 (Current)
 - Added integration icon (`brand/icon.png`, `brand/icon@2x.png`) — shown in Home Assistant 2026.3+ (Settings → Devices & Services)
+- `apocalypse_stock.zip` is now attached to every release automatically (GitHub Actions)
 
 ### Version 2.1.0
 - Sorting: name A→Z / Z→A, expiry soonest / latest, quantity, calories, recently added

@@ -1,0 +1,41 @@
+name: Release ZIP
+
+# Buduje apocalypse_stock.zip i dołącza go do wydania.
+# Automatycznie po opublikowaniu release albo ręcznie (Actions → Release ZIP → Run workflow) dla istniejącego tagu.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag wydania, np. v2.0.3"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check manifest version
+        run: |
+          VERSION=$(jq -r .version custom_components/apocalypse_stock/manifest.json)
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "::warning::manifest.json version ($VERSION) does not match tag ($TAG)"
+          fi
+
+      - name: Build ZIP
+        run: |
+          cd custom_components
+          zip -r ../apocalypse_stock.zip apocalypse_stock -x '*/__pycache__/*'
+
+      - name: Upload to release
+        run: gh release upload "$TAG" apocalypse_stock.zip --clobber --repo "$GITHUB_REPOSITORY"
