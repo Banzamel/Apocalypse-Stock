@@ -1,0 +1,67 @@
+name: Publish release
+
+# Tworzy tag + wydanie na wskazanym commicie, z opisem z .github/release-notes/<tag>.md i dołączonym ZIP-em.
+# Actions → Publish release → Run workflow. Commit puste = najnowszy main.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag, np. v2.1.0"
+        required: true
+      commit:
+        description: "Commit SHA (puste = najnowszy main)"
+        required: false
+        default: ""
+      latest:
+        description: "Oznacz jako Latest"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout main (release notes)
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          path: src
+
+      - name: Check tag, notes and manifest version
+        run: |
+          VERSION=$(jq -r .version src/custom_components/apocalypse_stock/manifest.json)
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "::error::manifest.json at this commit has version $VERSION, tag is $TAG - wrong commit?"
+            exit 1
+          fi
+          if [ ! -f "main/.github/release-notes/$TAG.md" ]; then
+            echo "::error::Missing main/.github/release-notes/$TAG.md"
+            exit 1
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists - delete it (and its tag) first"
+            exit 1
+          fi
+
+      - name: Build ZIP
+        run: cd src/custom_components && zip -r "$GITHUB_WORKSPACE/apocalypse_stock.zip" apocalypse_stock -x '*/__pycache__/*'
+
+      - name: Create release
+        run: |
+          gh release create "$TAG" apocalypse_stock.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$(git -C src rev-parse HEAD)" \
+            --title "$TAG" \
+            --notes-file "main/.github/release-notes/$TAG.md" \
+            --latest=${{ inputs.latest }}

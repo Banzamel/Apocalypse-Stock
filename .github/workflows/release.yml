@@ -29,7 +29,8 @@ jobs:
         run: |
           VERSION=$(jq -r .version custom_components/apocalypse_stock/manifest.json)
           if [ "v$VERSION" != "$TAG" ]; then
-            echo "::warning::manifest.json version ($VERSION) does not match tag ($TAG)"
+            echo "::error::manifest.json version ($VERSION) does not match tag ($TAG) - release points to the wrong commit"
+            exit 1
           fi
 
       - name: Build ZIP
