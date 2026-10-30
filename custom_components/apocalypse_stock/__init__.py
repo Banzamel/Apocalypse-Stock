@@ -69,4 +69,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """To wywołuje HA podczas usuwania integracji."""
-    return await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor"])
+    if unload_ok:
+        # Usługa jest rejestrowana w sensor.py, więc sprzątamy ją razem z platformą
+        hass.services.async_remove(DOMAIN, "update_stock")
+    return unload_ok

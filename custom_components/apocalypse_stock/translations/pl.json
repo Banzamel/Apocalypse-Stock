@@ -10,5 +10,12 @@
       "single_instance_allowed": "Dozwolona jest tylko jedna instancja Apocalypse Stock. Integracja jest już skonfigurowana."
     }
   },
-  "title": "Zapasy Apokaliptyczne"
+  "title": "Zapasy Apokaliptyczne",
+  "entity": {
+    "sensor": {
+      "stock_items": {
+        "unit_of_measurement": "zasobów"
+      }
+    }
+  }
 }

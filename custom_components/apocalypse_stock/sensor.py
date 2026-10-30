@@ -31,14 +31,12 @@ class ApocalypseStockSensor(SensorEntity):
         self._attr_name = "Apocalypse Stock Data"
         self._attr_unique_id = "apocalypse_stock_data_sensor"
         self._attr_icon = "mdi:shield-alert"
+        # Jednostka pochodzi z translations/*.json (entity.sensor.stock_items)
+        self._attr_translation_key = "stock_items"
 
     @property
-    def state(self):
+    def native_value(self):
         return len(self._items)
-
-    @property
-    def unit_of_measurement(self):
-        return "zasobów"
 
     @property
     def extra_state_attributes(self):

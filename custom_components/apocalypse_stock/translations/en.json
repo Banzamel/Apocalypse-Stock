@@ -10,5 +10,12 @@
       "single_instance_allowed": "Only one instance of Apocalypse Stock is allowed. The integration is already configured."
     }
   },
-  "title": "Apocalypse Stock"
+  "title": "Apocalypse Stock",
+  "entity": {
+    "sensor": {
+      "stock_items": {
+        "unit_of_measurement": "items"
+      }
+    }
+  }
 }
