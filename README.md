@@ -1,3 +1,5 @@
+<p align="center"><img src="custom_components/apocalypse_stock/brand/icon@2x.png" width="160" alt="Apocalypse Stock icon"></p>
+
 # 🧟 Apocalypse Stock - Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
@@ -240,6 +242,9 @@ custom_components/apocalypse_stock/
 ├── manifest.json              # Integration metadata
 ├── sensor.py                  # Sensor entity
 ├── services.yaml              # Service definitions
+├── brand/
+│   ├── icon.png              # Integration icon 256×256 (HA 2026.3+)
+│   └── icon@2x.png           # Integration icon 512×512
 ├── translations/
 │   ├── en.json               # English translations
 │   └── pl.json               # Polish translations
@@ -299,7 +304,10 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 2.1.0 (Current)
+### Version 2.1.1 (Current)
+- Added integration icon (`brand/icon.png`, `brand/icon@2x.png`) — shown in Home Assistant 2026.3+ (Settings → Devices & Services)
+
+### Version 2.1.0
 - Sorting: name A→Z / Z→A, expiry soonest / latest, quantity, calories, recently added
 - Grouped (by category) or flat list view; sort and view are remembered per browser
 - Search by name, brand, barcode, category and expiry date (`2026-05`, `05.2026`, `15.05.2026`), multi-word
