@@ -22,5 +22,18 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Apocalypse Stock options",
+        "description": "Settings used by the expiry and supply sensors.",
+        "data": {
+          "warning_days": "Warn about expiry (days before)",
+          "people": "Number of people",
+          "daily_kcal": "Daily calories per person (kcal)"
+        }
+      }
+    }
   }
 }

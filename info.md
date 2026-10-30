@@ -5,7 +5,10 @@ Comprehensive supply management for Home Assistant - track your emergency food s
 ## ✨ Features
 
 - **📦 Inventory Management** - Add, edit, and remove items with detailed information
-- **🔍 Smart Search & Filtering** - Quickly find items by name, brand, or category
+- **🔍 Smart Search & Filtering** - Search by name, brand, barcode or expiry date; filter by category, expiry status or date range
+- **↕️ Sorting** - By name, expiry date, quantity, calories or recently added; grouped or flat view
+- **⚠️ Expiry Warnings** - Highlighted expired / expiring items and automation-ready sensors
+- **🧮 Supply Estimate** - How many days your stock lasts for N people
 - **📊 Calorie Tracking** - Automatic calculation of total available calories
 - **📅 Expiration Monitoring** - Keep track of expiration dates for all items
 - **🏷️ Category Organization** - Organize items into collapsible categories:
@@ -19,6 +22,8 @@ Comprehensive supply management for Home Assistant - track your emergency food s
   - Spices
   - Medications
   - Energy foods
+  - Beverages
+  - Alcohol
   - Other
 
 - **📷 Barcode Scanner** - Scan product barcodes with your phone camera (Open Food Facts integration)
@@ -95,7 +100,7 @@ type: custom:apocalypse-stock-card
 
 ## 🔧 Technical Details
 
-- Creates a sensor: `sensor.apocalypse_stock_data`
+- Creates sensors: `sensor.apocalypse_stock_data`, `sensor.apocalypse_stock_calories`, `sensor.apocalypse_stock_expired`, `sensor.apocalypse_stock_expiring_soon`, `sensor.apocalypse_stock_supply_days`
 - Service available: `apocalypse_stock.update_stock`
 - Data stored in: `.storage/apocalypse_stock.storage`
 - Custom card served from: `/apocalypse_stock_local/apocalypse-card.js`

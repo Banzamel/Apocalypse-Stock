@@ -22,5 +22,18 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Zapasów Apokaliptycznych",
+        "description": "Ustawienia używane przez sensory dat ważności i zapasu dni.",
+        "data": {
+          "warning_days": "Ostrzegaj o dacie ważności (dni wcześniej)",
+          "people": "Liczba osób",
+          "daily_kcal": "Dzienne zapotrzebowanie na osobę (kcal)"
+        }
+      }
+    }
   }
 }

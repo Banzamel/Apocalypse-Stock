@@ -11,11 +11,17 @@ A comprehensive supply management integration for Home Assistant. Track your eme
 ## ✨ Features
 
 - **📦 Complete Inventory Management** - Add, edit, and remove items with detailed information (name, brand, weight, calories, expiration date)
-- **🔍 Smart Search & Filtering** - Quickly find items by name, brand, or filter by category
+- **🔍 Smart Search & Filtering** - Search by name, brand, barcode or expiry date (`05.2026`, `2026-05`), filter by category, expiry status or date range
+- **↕️ Sorting** - Sort by name (A→Z / Z→A), expiry date (soonest / latest), quantity, calories or recently added — grouped by category or as a flat list
+- **⚠️ Expiry Warnings** - Expired and soon-to-expire items are highlighted, with "in X days" / "X days ago" hints and clickable counters
+- **🧮 Supply Estimate** - Shows how many days your stock lasts for N people (expired items excluded)
+- **📡 Automation-ready Sensors** - Calories, expired, expiring-soon and supply-days sensors for notifications and automations
+- **⬇️ CSV Export** - Export the currently visible list to a spreadsheet
 - **📊 Real-time Calorie Tracking** - Automatic calculation of total available calories based on quantities
 - **📅 Expiration Date Monitoring** - Keep track of expiration dates for all your supplies
 - **🏷️ Category Organization** - Organize items into 13 collapsible categories
-- **✏️ Edit Products** - Change name and category of existing items
+- **✏️ Edit Products** - Edit every field of an item (name, brand, weight, calories, expiry, quantity, category, barcode)
+- **📋 New Batch** - Copy an item to add another batch with a different expiry date; scanning the same barcode with the same date increases quantity instead of duplicating
 - **💾 Persistent Storage** - All data is automatically saved and persists across restarts
 - **🎨 Beautiful Custom Card** - Modern, responsive Lovelace card with intuitive UI
 - **📷 Barcode Scanner** - Scan product barcodes with your phone camera to quickly add items using Open Food Facts database
@@ -55,9 +61,15 @@ Items can be organized into the following categories:
 9. Go to Settings → Devices & Services → Add Integration
 10. Search for "Apocalypse Stock" and add it
 
+### Updating
+
+- **HACS**: HACS → Integrations → Apocalypse Stock → **Update** (or ⋮ → *Redownload* and pick the version), then restart Home Assistant. If the new version is not listed yet, use ⋮ → *Update information*.
+- **Manual**: download `apocalypse_stock.zip` from the [latest release](https://github.com/banzamel/apocalypse-stock/releases/latest), replace `/config/custom_components/apocalypse_stock/` with its contents and restart Home Assistant.
+- After the restart the card URL gets a new `?v=<version>` automatically. If the browser/app still shows the old card, refresh with Ctrl+Shift+R (or clear the companion app cache).
+
 ### Manual Installation
 
-1. Download the [latest release](https://github.com/banzamel/apocalypse-stock/releases)
+1. Download `apocalypse_stock.zip` from the [latest release](https://github.com/banzamel/apocalypse-stock/releases)
 2. Extract the `apocalypse_stock` folder
 3. Copy it to your Home Assistant's `custom_components` directory:
    ```
@@ -91,6 +103,33 @@ The custom card is automatically registered. Add it to your dashboard:
 type: custom:apocalypse-stock-card
 ```
 
+#### Card options (all optional)
+
+| Option | Default | Description |
+|---|---|---|
+| `title` | `Zapasy` / `Supplies` | Card title |
+| `warning_days` | integration option (30) | Days before expiry an item is marked as "expiring soon" |
+| `people` | integration option (1) | Number of people for the supply estimate |
+| `daily_kcal` | integration option (2000) | Daily calories per person |
+| `entity` | `sensor.apocalypse_stock_data` | Stock data sensor |
+
+```yaml
+type: custom:apocalypse-stock-card
+title: Piwnica
+people: 4
+```
+
+The card language follows your Home Assistant language (Polish or English).
+
+### Integration options
+
+Settings → Devices & Services → Apocalypse Stock → **Configure**:
+- **Warn about expiry (days before)** — default 30
+- **Number of people** — default 1
+- **Daily calories per person** — default 2000
+
+These are used by the sensors and, unless overridden in the card config, by the card.
+
 ## 📱 Usage Guide
 
 ### Adding New Items
@@ -123,10 +162,19 @@ type: custom:apocalypse-stock-card
 ### Managing Inventory
 
 - **Adjust Quantity**: Use **+** / **-** buttons next to each item
+- **Edit Item**: Click **✏️** to change any field
+- **New Batch**: Click **📋** to add the same product with another expiry date
 - **Delete Item**: Click the **✕** button
-- **Search**: Type in the search box to filter by name or brand
-- **Filter by Category**: Use the dropdown to show only specific categories
 - **Expand/Collapse**: Click category headers to show/hide items
+
+### Search, Sorting & Filters
+
+- **Search** matches name, brand, barcode, category and expiry date. Several words must all match. Dates can be typed as `2026-05`, `05.2026` or `15.05.2026`
+- **Sort** (⇅ dropdown): name A→Z / Z→A, expiry soonest / latest (items without a date go last), quantity, total calories, recently added
+- **🗂 Categories** toggles between grouped view and a flat list (sort and grouping are remembered per browser)
+- **⚙ Filters** opens: status (expired / expiring soon / valid / no date / quantity 0) and an expiry date range (from–to)
+- Click the **⚠️ expired** or **⏳ expiring** badge in the header to filter quickly
+- **⬇ CSV** downloads the currently visible items
 
 ### Understanding the Display
 
@@ -139,9 +187,37 @@ type: custom:apocalypse-stock-card
 
 ### Created Entities
 
-- **Sensor**: `sensor.apocalypse_stock_data`
-  - State: Total number of items
-  - Attributes: Array of all items with details
+| Entity | State | Attributes |
+|---|---|---|
+| `sensor.apocalypse_stock_data` | number of items | `items` — all items (used by the card) |
+| `sensor.apocalypse_stock_calories` | total kcal (all items × qty) | `usable_kcal` — without expired items |
+| `sensor.apocalypse_stock_expired` | number of expired items (qty > 0) | `items` — name, expiry, days_left… |
+| `sensor.apocalypse_stock_expiring_soon` | items expiring within `warning_days` | `warning_days`, `items` |
+| `sensor.apocalypse_stock_supply_days` | days the usable stock lasts | `people`, `daily_kcal` |
+
+Expiry-based sensors are recalculated after every change and right after midnight.
+
+#### Example automation — expiry notification
+
+```yaml
+automation:
+  - alias: "Zapasy: kończy się data ważności"
+    trigger:
+      - platform: time
+        at: "09:00:00"
+    condition:
+      - condition: numeric_state
+        entity_id: sensor.apocalypse_stock_expiring_soon
+        above: 0
+    action:
+      - service: notify.notify
+        data:
+          title: "🧟 Apocalypse Stock"
+          message: >
+            {% for i in state_attr('sensor.apocalypse_stock_expiring_soon', 'items') %}
+            {{ i.name }} — {{ i.expiry }} ({{ i.days_left }} d)
+            {% endfor %}
+```
 
 ### Available Services
 
@@ -223,7 +299,22 @@ ln -s $(pwd)/custom_components/apocalypse_stock /path/to/homeassistant/custom_co
 
 ## 📝 Changelog
 
-### Version 2.0.3 (Current)
+### Version 2.1.0 (Current)
+- Sorting: name A→Z / Z→A, expiry soonest / latest, quantity, calories, recently added
+- Grouped (by category) or flat list view; sort and view are remembered per browser
+- Search by name, brand, barcode, category and expiry date (`2026-05`, `05.2026`, `15.05.2026`), multi-word
+- Filters: expiry status (expired / expiring soon / valid / no date / quantity 0) and expiry date range
+- Expiry highlighting with "in X days" / "X days ago" hints, warning dots on categories, clickable counters
+- Supply estimate (days for N people, expired items excluded)
+- Full item editing (all fields) in a single add/edit form, quantity on add, barcode stored with item
+- "New batch" button and quantity merge when the same barcode + expiry is added again
+- CSV export of the visible list
+- Card UI in Polish and English (follows Home Assistant language)
+- New sensors: calories, expired, expiring soon, supply days (recalculated at midnight)
+- Integration options: warning days, number of people, daily calories
+- Minimum Home Assistant version raised to 2024.11.0
+
+### Version 2.0.3
 - Fixed HTML injection — product names/brands (e.g. from Open Food Facts) are now escaped before rendering
 - Fixed card crash when an item has no brand or name
 - Fixed "Apocalypse Stock Card" missing from the visual card picker (registered in `window.customCards`)
